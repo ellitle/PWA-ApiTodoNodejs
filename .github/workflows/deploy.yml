@@ -1,0 +1,118 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches: [etu]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "swagger.yml"
+      - "deploy/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-backend-vps
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+  RELEASE_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies, build and test
+        run: |
+          npm ci
+          npm test
+
+      - name: Prepare release directory
+        uses: appleboy/ssh-action@v1
+        env:
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: RELEASE_ID
+          script: |
+            set -eu
+            command -v node
+            command -v npm
+            command -v curl
+            test "$(node -p 'process.versions.node.split(".")[0]')" = 24
+            sudo -n test -f /etc/bank.env
+            sudo -n install -d -m 755 -o "$(id -un)" -g "$(id -gn)" "/var/www/bank/releases/$RELEASE_ID"
+
+      - name: Upload compiled API
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          source: "dist,package.json,package-lock.json,swagger.yml"
+          target: /var/www/bank/releases/${{ env.RELEASE_ID }}
+
+      - name: Install production dependencies and restart API
+        uses: appleboy/ssh-action@v1
+        env:
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: RELEASE_ID
+          command_timeout: 10m
+          script: |
+            set -eu
+            release="/var/www/bank/releases/$RELEASE_ID"
+            cd "$release"
+            npm ci --omit=dev
+            sudo -n chown -R www-data:www-data "$release"
+
+            previous=$(readlink -f /var/www/bank/current || true)
+            rollback() {
+              if [ -n "$previous" ] && [ -d "$previous" ]; then
+                sudo -n ln -sfn "$previous" /var/www/bank/current.next
+                sudo -n mv -Tf /var/www/bank/current.next /var/www/bank/current
+                sudo -n systemctl restart bank || true
+              else
+                sudo -n systemctl stop bank || true
+              fi
+            }
+            trap rollback EXIT
+            sudo -n ln -sfn "$release" /var/www/bank/current.next
+            sudo -n mv -Tf /var/www/bank/current.next /var/www/bank/current
+            sudo -n systemctl restart bank
+
+            for attempt in $(seq 1 15); do
+              if curl --fail --silent --show-error --max-time 3 http://127.0.0.1:3001/ping; then
+                sudo -n systemctl is-active --quiet bank
+                trap - EXIT
+                exit 0
+              fi
+              sleep 2
+            done
+            sudo -n systemctl status bank --no-pager || true
+            exit 1

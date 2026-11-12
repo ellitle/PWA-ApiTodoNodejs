@@ -1,0 +1,1029 @@
+# Adapt VPS deployment workflow
+
+> i want to adapt my old workflow deploy in order to match it with my new API
+> ```yaml
+> name: Deploy Backend to VPS
+>
+> on:
+>   push:
+>     branches: [etu]
+>     paths:
+>       - "CleanTodo.WebAPI/**"
+>       - "CleanTodo.Application/**"
+>       - "CleanTodo.Domain/**"
+>       - "CleanTodo.Infrastructure/**"
+>   workflow_dispatch:
+>
+> env:
+>   DOTNET_VERSION: "10.0.x"
+>
+> jobs:
+>   deploy:
+>     runs-on: ubuntu-latest
+>
+>     steps:
+>       - name: Checkout repository
+>         uses: actions/checkout@v6
+>
+>       - name: Setup .NET
+>         uses: actions/setup-dotnet@v5
+>         with:
+>           dotnet-version: ${{ env.DOTNET_VERSION }}
+>
+>       - name: Create appsettings.Production.json
+>         run: |
+>           cat > CleanTodo.WebAPI/appsettings.Production.json << EOF
+>           {
+>             "ConnectionStrings": {
+>               "DefaultConnection": "${{ secrets.DB_CONNECTION_STRING }}"
+>             },
+>             "JwtSettings": {
+>               "Key": "${{ secrets.JWT_KEY }}",
+>               "Issuer": "your-app",
+>               "Audience": "your-app",
+>               "ExpiryMinutes": 6000
+>             },
+>             "Logging": {
+>               "LogLevel": {
+>                 "Default": "Information",
+>                 "Microsoft.AspNetCore": "Warning"
+>               }
+>             },
+>             "AllowedHosts": "*"
+>           }
+>           EOF
+>       - name: Publish in Release mode
+>         run: |
+>           dotnet publish CleanTodo.WebAPI/CleanTodo.API.csproj \
+>             -c Release \
+>             -o ./publish
+>       - name: Stop API and clean old deployment
+>         uses: appleboy/ssh-action@v1
+>         with:
+>           host: ${{ secrets.HOST }}
+>           username: ${{ secrets.USERNAME }}
+>           key: ${{ secrets.SSH_KEY }}
+>           passphrase: ${{ secrets.SSH_PASSPHRASE }}
+>           script: |
+>             set -e
+>             systemctl stop cleantodo
+>             rm -rf /var/www/myapi/*
+>             mkdir -p /var/www/myapi
+>
+>       - name: Deploy to VPS
+>         uses: appleboy/scp-action@v1
+>         with:
+>           host: ${{ secrets.HOST }}
+>           username: ${{ secrets.USERNAME }}
+>           key: ${{ secrets.SSH_KEY }}
+>           passphrase: ${{ secrets.SSH_PASSPHRASE }}
+>           source: "publish/*"
+>           target: "/var/www/myapi/"
+>           strip_components: 1
+>           overwrite: true
+>
+>       - name: Restart API
+>         uses: appleboy/ssh-action@v1
+>         with:
+>           host: ${{ secrets.HOST }}
+>           username: ${{ secrets.USERNAME }}
+>           key: ${{ secrets.SSH_KEY }}
+>           passphrase: ${{ secrets.SSH_PASSPHRASE }}
+>           script: |
+>             set -e
+>             chown -R www-data:www-data /var/www/myapi
+>             systemctl start cleantodo
+>             systemctl status cleantodo --no-pager
+> ```
+>
+> with my new API
+
+<details><summary>16 previous messages</summary>
+
+> I’ll check how this API runs, then adapt the deployment workflow for its build, configuration, and start commands.
+>
+> <details><summary>Ran 4 commands, searched the web</summary>
+>
+> - Ran `Get-Location; rg --files -g AGENTS.md -g package.json -g '*lock*' -g 'Dockerfile*' -g '*compose*' -g '.github/**' -g 'README*' -g '*config*' -g '.env*' -g '!node_modules' -g '!.git'`
+>
+> - Ran `Get-ChildItem -Force; Get-Content package.json; Get-Content README.md; Get-Content .env.example; rg --files -g '!node_modules' -g '!.git'; git status --short; Get-ChildItem .. -Filter AGENTS.md -Force`
+>
+> - Ran `Get-Content src/server.ts; Get-Content src/db/connection.ts; Get-Content src/routes/health.routes.ts; Get-Content src/services/auth.service.ts; Get-Content tsconfig.json; Get-Content .gitignore; Get-Content package-lock.json -TotalCount 65; rg 'process.env|swagger|models' src; Get-Item D:\AGENTS.md,D:\Actually_School\AGENTS.md,D:\Actually_School\PWA\AGENTS.md,D:\Actually_School\PWA\NodeHotel\AGENTS.md -ErrorAction SilentlyContinue`
+>
+> Searched the web for `site.github.com/actions/setup-node node-version 24 v6 ...`
+>
+> - Ran `node --version; npm --version; npm run build; git branch --show-current`
+>
+> </details>
+>
+> This API needs a TypeScript build, production npm dependencies, and a Node.js systemd service. I also found two deployment blockers: three route parameter type errors, and CommonJS output that conflicts with the package’s ES module setting. I’ll fix those and keep the `etu` trigger, `cleantodo` service name, and `/var/www/myapi` base directory from your workflow.
+>
+> <details><summary>Created 4 files, edited 2 files, ran 3 commands, searched the web</summary>
+>
+> - Ran `Get-Content src/controllers/todo.controller.ts; Get-Content src/db/schema.ts; Get-Content drizzle.config.ts; Get-Content src/controllers/auth.controller.ts`
+>
+> Searched the web for `https://github.com/appleboy/ssh-action`
+>
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/.github/workflows/deploy.yml` (+117 -0)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/README.md` (+81 -0)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/cleantodo.env.example` (+8 -0)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/cleantodo.service` (+19 -0)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/package.json` (+1 -1)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/controllers/todo.controller.ts` (+4 -4)
+>
+> - Ran `npm run build`
+>
+> - Ran `node -e 'const fs = require("node:fs"); const yaml = require("yamljs"); const workflow = yaml.parse(fs.readFileSync(".github/workflows/deploy.yml", "utf8")); if (workflow.jobs.deploy.steps.length !== 6) throw new Error("Unexpected workflow structure"); console.log("Workflow YAML parsed successfully");'`
+>
+> </details>
+>
+> The workflow and server setup files are in place, and the build now passes. Deployment prepares a new release before restarting the API and restores the previous release if the `/ping` check fails. I’m checking that the compiled server starts locally; the VPS will still need the documented Node.js service and environment setup.
+>
+> i want the var/www/ to be var/www/bank
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `node -e 'const { spawn } = require("node:child_process"); const server = spawn(process.execPath, ["dist/server.js"], { env: { ...process.env, NODE_ENV: "production", PORT: "30991" }, stdio: ["ignore", "pipe", "pipe"] }); let output = ""; server.stdout.on("data", chunk => output += chunk); server.stderr.on("data", chunk => output += chunk); (async () => { try { let ready = false; for (let attempt = 0; attempt < 30; attempt++) { if (server.exitCode !== null) throw new Error(output); await new Promise(resolve => setTimeout(resolve, 200)); try { const response = await fetch("http://127.0.0.1:30991/ping"); const body = await response.json(); if (response.ok && body.message === "pong") { ready = true; break; } } catch {} } if (!ready) throw new Error("Server did not pass /ping: " + output); console.log("Compiled server startup and /ping passed on " + process.version); } catch (error) { console.error(error); process.exitCode = 1; } finally { server.kill(); } })();'`
+> - Ran `git diff --check; git diff --stat; git status --short; Get-Content .github/workflows/deploy.yml`
+>
+> </details>
+>
+> I’ll use `/var/www/bank` as the deployment directory and update the workflow, systemd service, and setup instructions to match.
+>
+> <details><summary>Ran a command</summary>
+>
+> - Ran `$deploymentFiles = @('.github/workflows/deploy.yml', 'deploy/cleantodo.service', 'deploy/README.md'); foreach ($deploymentFile in $deploymentFiles) { $deploymentText = [System.IO.File]::ReadAllText((Join-Path (Get-Location) $deploymentFile)); [System.IO.File]::WriteAllText((Join-Path (Get-Location) $deploymentFile), $deploymentText.Replace('/var/www/myapi', '/var/www/bank')) }; rg '/var/www/' .github deploy`
+>
+> </details>
+>
+> there are no more todos
+>
+> I’ll update the deployment naming to `bank`, including `bank.service` and `/etc/bank.env`. The source still contains todo routes, so I’ll leave those unchanged unless you want them removed too.
+>
+> Should I also remove the remaining todo routes, controller, service, repository, and database schema, or only update the deployment naming?
+> - Only update deployment naming
+> - Remove the todo feature too
+>
+> **Should I also remove the remaining todo routes, controller, service, repository, and database schema, or only update the deployment naming?**
+>
+> Remove the todo feature too
+>
+> <details><summary>Edited 4 files, deleted 5 files, ran 3 commands</summary>
+>
+> - Ran `Get-Content src/routes/todo.routes.ts; Get-Content src/services/todo.service.ts; Get-Content src/repositories/todo.repository.ts; Get-Content src/types/todo.types.ts; Get-Content swagger.yml; rg -n -i 'todo' src models drizzle README.md package.json .env.example deploy .github`
+> - Ran `node -e 'const { spawn } = require("node:child_process"); const server = spawn(process.execPath, ["dist/server.js"], { env: { ...process.env, NODE_ENV: "production", PORT: "30991" }, stdio: "inherit" }); (async () => { try { await new Promise(resolve => setTimeout(resolve, 3000)); const response = await fetch("http://127.0.0.1:30991/ping", { signal: AbortSignal.timeout(3000) }); console.log(response.status, await response.text()); if (!response.ok) process.exitCode = 1; } catch (error) { console.error(error); process.exitCode = 1; } finally { server.kill(); } })();'`
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/.env.example` (+2 -2)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/drizzle.config.ts` (+2 -2)
+> - Deleted `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/controllers/todo.controller.ts` (+0 -73)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/db/schema.ts` (+1 -9)
+> - Deleted `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/repositories/todo.repository.ts` (+0 -46)
+> - Deleted `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/routes/todo.routes.ts` (+0 -17)
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/server.ts` (+0 -2)
+> - Deleted `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/services/todo.service.ts` (+0 -68)
+> - Deleted `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/src/types/todo.types.ts` (+0 -24)
+> - Ran ``$bankFiles = @('.github/workflows/deploy.yml', 'deploy/cleantodo.service', 'deploy/cleantodo.env.example', 'deploy/README.md'); foreach ($bankFile in $bankFiles) { $bankFilePath = Join-Path (Get-Location) $bankFile; $bankText = [System.IO.File]::ReadAllText($bankFilePath); [System.IO.File]::WriteAllText($bankFilePath, $bankText.Replace('cleantodo', 'bank').Replace('Todo Node.js API', 'Bank Node.js API').Replace('DB_USER=todo_api', 'DB_USER=bank_api')) }; Move-Item -LiteralPath deploy/cleantodo.service -Destination deploy/bank.service; Move-Item -LiteralPath deploy/cleantodo.env.example -Destination deploy/bank.env.example; $swaggerPath = Join-Path (Get-Location) 'swagger.yml'; $swaggerText = [System.IO.File]::ReadAllText($swaggerPath); $swaggerText = ($swaggerText -split '  # SECTION TODOS DE BASE DE')[0].TrimEnd() + "`n"; [System.IO.File]::WriteAllText($swaggerPath, $swaggerText.Replace('title: Todo API', 'title: Bank API')); foreach ($manifestFile in @('package.json', 'package-lock.json')) { $manifestPath = Join-Path (Get-Location) $manifestFile; $manifestText = [System.IO.File]::ReadAllText($manifestPath); [System.IO.File]::WriteAllText($manifestPath, $manifestText.Replace('"name": "todo-api"', '"name": "bank-api"').Replace('MariaDB, and Prisma ORM', 'MariaDB, and Drizzle ORM')) }``
+>
+> </details>
+>
+> I’m removing the todo feature from the routes, source files, schema, and Swagger docs. Deployment now uses `/var/www/bank`, `bank.service`, and `/etc/bank.env`. The compiled API passed its local `/ping` check; I’ll also verify that the removed todo endpoints return 404.
+>
+> <details><summary>Edited a file, ran 6 commands</summary>
+>
+> - Ran `npm run db:generate`
+> - Ran ````$readmeText = @'
+> # Bank API
+>
+> API Node.js et TypeScript avec Express, MariaDB et Drizzle ORM.
+> Le projet conserve l'authentification et les utilisateurs avec leur solde.
+>
+> ## Démarrage local
+>
+> 1. Installer les dépendances avec `npm ci` (Node.js 24).
+> 2. Copier `.env.example` vers `.env` et configurer MariaDB et `JWT_SECRET`.
+> 3. Créer la base `ScammistanBank` dans MariaDB.
+> 4. Sur une nouvelle base locale, exécuter `npm run db:push` pour créer le schéma.
+> 5. Démarrer avec `npm run dev`.
+>
+> Le fichier `.env` contient des secrets et doit rester ignoré par Git.
+>
+> ## Routes
+>
+> | Méthode | Route | Description |
+> | --- | --- | --- |
+> | POST | `/api/auth/register` | Créer un utilisateur |
+> | POST | `/api/auth/login` | Se connecter |
+> | POST | `/api/auth/logout` | Se déconnecter |
+> | GET | `/ping` | Vérifier le serveur |
+> | GET | `/health` | Vérifier le serveur et MariaDB |
+>
+> Swagger est disponible à `/swagger` en développement uniquement.
+>
+> ## Build et déploiement
+>
+> ```sh
+> npm run build
+> npm start
+> ```
+>
+> Le workflow GitHub Actions déploie les changements de la branche `etu` dans
+> `/var/www/bank` et démarre le service systemd `bank`. Consulter
+> [les instructions VPS](deploy/README.md) pour la configuration initiale,
+> les secrets GitHub et les variables d'environnement du serveur.
+>
+> Les migrations historiques restent dans `drizzle/`. Les migrations de base de
+>  données ne sont jamais appliquées automatiquement par le workflow.
+> '@; [System.IO.File]::WriteAllText((Join-Path (Get-Location) 'README.md'), $readmeText.Replace("`n données", "`ndonnées") + "`n"); $workspacePath = (Get-Location).Path; $compiledRoot = [System.IO.Path]::GetFullPath((Join-Path $workspacePath 'dist')); if ($compiledRoot -ne ($workspacePath + '\dist')) { throw 'Unexpected build output directory' }; Get-ChildItem -LiteralPath $compiledRoot -Recurse -File | Where-Object { $_.Name -match '^todo\.(controller|routes|service|repository|types)\.(js|js\.map|d\.ts|d\.ts\.map)$' } | ForEach-Object { Remove-Item -LiteralPath $_.FullName }; npm run build````
+> - Ran `node -e 'const fs = require("node:fs"); const yaml = require("yamljs"); const workflow = yaml.parse(fs.readFileSync(".github/workflows/deploy.yml", "utf8")); if (!workflow.on.push || workflow.jobs.deploy.steps.length !== 6) throw new Error("Invalid workflow"); const spec = yaml.parse(fs.readFileSync("swagger.yml", "utf8")); if (Object.keys(spec.paths).some(path => path.includes("todo"))) throw new Error("Todo paths remain"); console.log("Workflow and Swagger YAML checks passed");'; rg -n -i 'todo|myapi|cleantodo' src .github deploy README.md package.json .env.example drizzle.config.ts; git diff --numstat; git status --short`
+> - Ran `node -e 'const { spawn } = require("node:child_process"); const server = spawn(process.execPath, ["dist/server.js"], { env: { ...process.env, NODE_ENV: "production", PORT: "30991" }, stdio: ["ignore", "pipe", "pipe"] }); let output = ""; server.stdout.on("data", chunk => output += chunk); server.stderr.on("data", chunk => output += chunk); (async () => { try { await new Promise(resolve => setTimeout(resolve, 3000)); if (server.exitCode !== null) throw new Error(output); for (const [method, path, expected] of [["GET", "/ping", 200], ["POST", "/api/auth/logout", 200], ["GET", "/api/todos", 404], ["POST", "/api/todo", 404], ["PATCH", "/api/todo/test", 404], ["DELETE", "/api/todo/test", 404]]) { const response = await fetch("http://127.0.0.1:30991" + path, { method, signal: AbortSignal.timeout(3000) }); if (response.status !== expected) throw new Error(method + " " + path + " returned " + response.status); console.log(method + " " + path + ": " + expected); } } catch (error) { console.error(error); process.exitCode = 1; } finally { server.kill(); } })();'`
+> - Ran `Get-Content deploy/README.md; Get-Content deploy/bank.service; Get-ChildItem drizzle; git -c core.whitespace=blank-at-eol,blank-at-eof,-cr-at-eol diff --check -- package.json package-lock.json src/db/schema.ts src/server.ts README.md .env.example drizzle.config.ts; Get-Content README.md -Tail 4`
+> - Ran `npm run db:generate`
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/README.md` (+4 -3)
+>
+> </details>
+</details>
+
+Updated deployment to `/var/www/bank` using `bank.service` and `/etc/bank.env`.
+
+Removed the todo routes, controller, service, repository, types, schema definition, and Swagger entries. Existing database tables remain untouched.
+
+Build passes; `/ping` and logout return 200, and removed todo endpoints return 404.
+
+Follow the [VPS setup instructions](D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/README.md) before running the workflow. No VPS deployment has been run.
+
+> Should i prep the server in order to receive it, or will it be fine?
+
+Yes—prepare the VPS once before running the workflow. It handles uploading, installing production dependencies, and restarting the API, but assumes the server is configured.
+
+You need:
+
+- **Node.js 24 and npm**, available system-wide. The service expects Node at `/usr/bin/node`.
+- **MariaDB**, with your `ScammistanBank` database, application user, and `users` table already created.
+- **Environment configuration:** copy [bank.env.example](D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/bank.env.example) to `/etc/bank.env` and fill in the database credentials and `JWT_SECRET`. Keep `PORT=3001`.
+- **Systemd service:** copy [bank.service](D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/bank.service) to `/etc/systemd/system/bank.service`.
+- **SSH access:** configure GitHub secrets `HOST`, `USERNAME`, `SSH_KEY`, and optionally `SSH_PASSPHRASE`. The SSH user must be able to run the workflow’s `sudo -n` commands without a password.
+- **HTTPS reverse proxy:** forward your domain to `http://127.0.0.1:3001`.
+
+After copying and editing those files, run on the VPS:
+
+```bash
+sudo chown root:root /etc/bank.env
+sudo chmod 600 /etc/bank.env
+sudo systemctl daemon-reload
+sudo systemctl enable bank
+```
+
+If the old API still uses port 3001, stop it before the first deployment:
+
+```bash
+sudo systemctl disable --now cleantodo
+```
+
+Then run the GitHub workflow. It will create `/var/www/bank/releases`, activate the release through `/var/www/bank/current`, and start `bank`.
+
+The full checklist is in [deploy/README.md](D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/README.md).
+
+> oh and initially i had users with balances, but now i want my users to have accounts instead.
+>
+> so ive adjusted my tables, but was wondering what was missing now&#x20;
+> ```sql
+> CREATE TABLE scammistanbank.users (
+>     id VARCHAR(36) PRIMARY KEY,
+>     lastName VARCHAR(100) NOT NULL,
+>     firstName VARCHAR(100) NOT NULL,
+>     email VARCHAR(254) NOT NULL UNIQUE,
+>     passwordHash VARCHAR(255) NOT NULL,
+>     createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+> );
+>
+> INSERT INTO scammistanbank.users (
+>     id,
+>     lastName,
+>     firstName,
+>     email,
+>     passwordHash
+> ) VALUES (
+>     UUID(),
+>     'Mom',
+>     'Quentins',
+>     'quentin@test.com',
+>     'REPLACE_WITH_HASH_FROM_YOUR_APP'
+> );
+>
+> CREATE TABLE scammistanbank.account (
+>     id VARCHAR(36) PRIMARY KEY,
+>     accountUser VARCHAR(100) NOT NULL,
+>     balance DECIMAL(15, 2) NOT NULL DEFAULT 10000.00,
+>     openedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+> );
+> ```
+
+<details><summary>2 previous messages</summary>
+
+> I’ll check how the API currently handles users and balances, then compare it with your new tables to identify what still needs to change.
+>
+> <details><summary>Ran a command, searched the web</summary>
+>
+> - Ran `Get-Content src/db/schema.ts; Get-Content src/repositories/user.repository.ts; Get-Content src/types/user.types.ts; Get-Content src/services/auth.service.ts; Get-Content src/controllers/auth.controller.ts; Get-Content src/Utils/accountValidator.ts; Get-Content models/User.js; rg -n 'balance|account|ScammistanBank|scammistanbank' src swagger.yml drizzle.config.ts`
+>
+> Searched the web for `site.mariadb.com/docs foreign keys InnoDB references index columns ...`
+>
+> </details>
+</details>
+
+The main missing piece is **the relationship between an account and its owner**. `accountUser` should hold the user’s UUID, with a foreign key referencing `users.id`. That prevents accounts from referencing nonexistent users. [MariaDB foreign keys](https://mariadb.com/docs/server/architecture/server-constraints/foreign-key-constraints)
+
+Your account definition could be:
+
+```sql
+CREATE TABLE scammistanbank.account (
+    id VARCHAR(36) PRIMARY KEY,
+    userId VARCHAR(36) NOT NULL,
+    balance DECIMAL(15, 2) NOT NULL DEFAULT 10000.00,
+    openedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_account_user
+        FOREIGN KEY (userId)
+        REFERENCES scammistanbank.users(id)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+```
+
+This allows **one user to have multiple accounts**. Add `UNIQUE (userId)` only if each user should have exactly one account at most.
+
+I checked your code, and these changes are still missing:
+
+- **Drizzle schema:** remove `users.balance` and define the `account` table with its foreign key.
+- **User types:** remove `balance` from `User`, `UserResponse`, and `UserLoginResponse`. Define separate account types.
+- **User repository:** remove `balance` from `mapToUser`.
+- **Auth service:** remove `createdUser.balance` and `user.balance` from registration/login results.
+- **Account functionality:** add a repository, service, controller, and routes for creating and listing accounts. Use the authenticated user’s ID to establish ownership and verify access.
+- **Registration behavior:** decide whether registration automatically opens an account. If so, create the user and account in one database transaction.
+- **Existing data:** migrate any existing user balances into account rows before dropping the old balance column.
+
+Two details also matter:
+
+- Your SQL uses `scammistanbank`, while the API currently defaults to `ScammistanBank`, including a hardcoded health check. Use consistent casing—database names can be case-sensitive on your Linux VPS. [MariaDB case sensitivity](https://mariadb.com/docs/server/reference/sql-structure/sql-language-structure/identifier-case-sensitivity)
+- The sample password placeholder cannot authenticate. Register through the API to generate a bcrypt hash; inserting a user also won’t automatically create an account.
+
+I haven’t changed files for this yet.
+
+> can u adapt it?
+> ````sql
+> CREATE TABLE `users` (
+> 	`id` varchar(36) NOT NULL,
+> 	`lastname` varchar(255) NOT NULL,
+> 	`firstname` varchar(255) NOT NULL,
+> 	`email` varchar(255) NOT NULL,
+> 	`passwordHash` varchar(255) NOT NULL,
+> 	`balance` decimal(10,2) NOT NULL DEFAULT 10000.00,
+> 	`created_at` timestamp NOT NULL DEFAULT (now()),
+> 	CONSTRAINT `users_id` PRIMARY KEY(`id`)
+> );```
+> ````
+
+> what is&#x20;
+> ```ini
+> ENGINE=InnoDB;
+> ```
+>
+> in&#x20;
+> ```sql
+> CREATE TABLE scammistanbank.account (
+>     id VARCHAR(36) PRIMARY KEY,
+>     userId VARCHAR(36) NOT NULL,
+>     balance DECIMAL(15, 2) NOT NULL DEFAULT 10000.00,
+>     openedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+>
+>     CONSTRAINT fk_account_user
+>         FOREIGN KEY (userId)
+>         REFERENCES scammistanbank.users(id)
+>         ON DELETE RESTRICT
+> ) ENGINE=InnoDB;
+> ```
+
+`ENGINE=InnoDB` tells MariaDB **how to store and manage that table**. It’s part of the SQL statement.
+
+InnoDB supports:
+
+- **Foreign keys:** ensures every account’s `userId` references an existing user.
+- **Transactions:** lets multiple changes succeed or roll back together—useful for transferring money between accounts.
+
+In your example, it enables the foreign key and `ON DELETE RESTRICT`, which prevents deleting a user who still has accounts.
+
+Both `users` and `account` should use InnoDB for this relationship.
+
+> can u help me add the database, tables and user in mariadb on my vps
+
+<details><summary>5 previous messages</summary>
+
+> I’ll check the database settings your API expects and what access is available, then help set up MariaDB on the VPS.
+>
+> <details><summary>Ran a command</summary>
+>
+> - Ran `Get-Content src/db/schema.ts; Get-Content src/db/connection.ts; Get-Content deploy/bank.env.example; Get-Content drizzle.config.ts; Get-Content src/types/user.types.ts; Get-Content src/repositories/user.repository.ts; git status --short; Get-ChildItem -LiteralPath $env:USERPROFILE\.ssh -Name -ErrorAction SilentlyContinue`
+>
+> </details>
+>
+> What SSH hostname/IP and username should I use for your VPS, and is this a new database or one with existing data? Don’t send passwords or private keys.
+>
+> <details><summary>Created a file, searched the web</summary>
+>
+> Searched the web for `site.mariadb.com/docs CREATE USER localhost 127.0.0.1 Linux grant ...`
+>
+> - Wrote `D:/Actually_School/PWA/NodeHotel/PWA-ApiTodoNodejs/deploy/database.sql` (+32 -0)
+>
+> </details>
+>
+> **What SSH hostname/IP and username should I use for your VPS, and is this a new database or one with existing data? Don’t send passwords or private keys.**
+>
+> none, it doesnt exist yet, i just want you to help me through it
+</details>
+
+Got it—we’ll do it step by step, with you running the commands.
+
+First, connect to your VPS through SSH. Assuming it runs Ubuntu or Debian, install and start MariaDB:
+
+```bash
+sudo apt update
+sudo apt install mariadb-server
+sudo systemctl enable --now mariadb
+```
+
+Then open its administrator console:
+
+```bash
+sudo mariadb
+```
+
+You should see a prompt resembling:
+
+```text
+MariaDB [(none)]>
+```
+
+Run this to create the database:
+
+```sql
+CREATE DATABASE ScammistanBank
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+```
+
+Then verify it:
+
+```sql
+SHOW DATABASES;
+```
+
+I’m using `ScammistanBank` with that exact capitalization because your API currently expects it.
+
+Tell me when you reach this point—or paste any error—and we’ll create the tables and the `bank_api` database login next. Your API also still needs its old `users.balance` references updated before it can use the new account schema.
+
+> MariaDB [(none)]> SHOW DATABASES;\
+> +--------------------+\
+> \| Database           |\
+> +--------------------+\
+> \| PWATodos           |\
+> \| ScammistanBank     |\
+> \| cleantododb        |\
+> \| information_schema |\
+> \| mysql              |\
+> \| performance_schema |\
+> \| sys                |\
+> +--------------------+\
+> 7 rows in set (0.003 sec)
+
+`ScammistanBank` exists. Now paste this into the MariaDB console to select it and create both tables:
+
+```sql
+USE ScammistanBank;
+
+CREATE TABLE users (
+    id VARCHAR(36) PRIMARY KEY,
+    lastName VARCHAR(100) NOT NULL,
+    firstName VARCHAR(100) NOT NULL,
+    email VARCHAR(254) NOT NULL UNIQUE,
+    passwordHash VARCHAR(255) NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE account (
+    id VARCHAR(36) PRIMARY KEY,
+    userId VARCHAR(36) NOT NULL,
+    balance DECIMAL(15, 2) NOT NULL DEFAULT 10000.00,
+    openedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_account_user
+        FOREIGN KEY (userId)
+        REFERENCES users(id)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+```
+
+Then verify:
+
+```sql
+SHOW TABLES;
+DESCRIBE users;
+DESCRIBE account;
+```
+
+You should see `users` and `account`. Paste the result or any error, and we’ll create the API’s database login next.
+
+> User context
+>
+> Images:
+> - `~/AppData/Local/Temp/codex-clipboard-516bb3ea-398a-408b-bcf2-d98ce07c5698.png`
+
+Both tables look correct. Next, create the **database login your API will use**.
+
+Run this in MariaDB, replacing the password placeholder with a strong password. Keep the real password private.
+
+```sql
+CREATE USER 'bank_api'@'127.0.0.1'
+IDENTIFIED BY 'REPLACE_WITH_YOUR_PASSWORD';
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON ScammistanBank.*
+TO 'bank_api'@'127.0.0.1';
+
+SHOW GRANTS FOR 'bank_api'@'127.0.0.1';
+```
+
+Then leave MariaDB:
+
+```sql
+EXIT;
+```
+
+Test the new login from your VPS terminal:
+
+```bash
+mariadb -h 127.0.0.1 -u bank_api -p ScammistanBank
+```
+
+Enter the password when prompted, then run:
+
+```sql
+SHOW TABLES;
+```
+
+If you see `users` and `account`, the database login works. Next we’ll put those credentials into `/etc/bank.env`.
+
+> yup&#x20;
+> MariaDB [ScammistanBank]> SHOW TABLES;\
+> +--------------------------+\
+> \| Tables_in_ScammistanBank |\
+> +--------------------------+\
+> \| account                  |\
+> \| users                    |\
+> +--------------------------+\
+> 2 rows in set (0.001 sec)
+
+The database login works. Next, save the API’s configuration on the VPS.
+
+Exit MariaDB:
+
+```sql
+EXIT;
+```
+
+Generate a JWT secret in the terminal:
+
+```bash
+openssl rand -hex 32
+```
+
+Copy the result, then open the configuration file:
+
+```bash
+sudo nano /etc/bank.env
+```
+
+Enter this, replacing both placeholders:
+
+```ini
+NODE_ENV=production
+PORT=3001
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=bank_api
+DB_PASSWORD="YOUR_DATABASE_PASSWORD"
+DB_NAME=ScammistanBank
+JWT_SECRET="YOUR_GENERATED_SECRET"
+```
+
+Save with **Ctrl+O**, **Enter**, then exit with **Ctrl+X**. Protect the file:
+
+```bash
+sudo chown root:root /etc/bank.env
+sudo chmod 600 /etc/bank.env
+```
+
+Keep the password and secret private. Once that’s done, we’ll configure `bank.service`. The API code still needs updating for the separate accounts table before deployment.
+
+> done
+
+Next, configure the service that will run your API.
+
+First, check Node.js:
+
+```bash
+/usr/bin/node --version
+npm --version
+```
+
+The workflow expects **Node.js 24**. If Node is missing or shows a different major version, send me the output before continuing.
+
+Otherwise, create the service:
+
+```bash
+sudo nano /etc/systemd/system/bank.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=Bank Node.js API
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bank/current
+EnvironmentFile=/etc/bank.env
+ExecStart=/usr/bin/node /var/www/bank/current/dist/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save and exit, then run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable bank
+```
+
+Leave it stopped for now—the first deployment will create `/var/www/bank/current` and start it.
+
+Send me the Node.js version output when you’re done.
+
+> ```yaml
+> root@PWA-API:~# /usr/bin/node --version
+> npm --version
+> -bash: /usr/bin/node: No such file or directory
+> Command 'npm' not found, but can be installed with:
+> apt install npm
+> ```
+
+<details><summary>2 previous messages</summary>
+
+> Node.js isn’t installed yet. I’ll check the installation instructions for Node.js 24 so it matches your deployment workflow.
+>
+> <details><summary>Searched the web</summary>
+>
+> Searched the web for `site.deb.nodesource.com Node.js 24 installation setup_24.x Ubuntu ...`
+>
+> </details>
+</details>
+
+Install **Node.js 24** using NodeSource’s repository. Since you’re logged in as root, run:
+
+```bash
+apt update
+apt install -y curl ca-certificates
+
+curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh
+bash /tmp/nodesource_setup.sh
+
+apt install -y nodejs
+```
+
+This follows the [NodeSource installation instructions](https://nodesource.com/blog/Update-Node.js-versions-on-linux).
+
+Then verify:
+
+```bash
+/usr/bin/node --version
+npm --version
+```
+
+Node should show `v24.x.x`, and npm should print a version number. Paste those results before we continue.
+
+> ```yaml
+> root@PWA-API:~# apt update
+> apt install -y curl ca-certificates
+>
+> curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup.sh
+> bash /tmp/nodesource_setup.sh
+>
+> apt install -y nodejs
+> Hit:1 http://mirrors.digitalocean.com/ubuntu noble InRelease
+> Get:2 http://mirrors.digitalocean.com/ubuntu noble-updates InRelease [126 kB]
+> Get:3 http://mirrors.digitalocean.com/ubuntu noble-backports InRelease [126 kB]
+> Hit:4 https://repos-droplet.digitalocean.com/apt/droplet-agent main InRelease
+> Hit:5 https://repos.insights.digitalocean.com/apt/do-agent main InRelease
+> Get:6 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+> Get:7 http://mirrors.digitalocean.com/ubuntu noble-updates/main amd64 Packages [1450 kB]
+> Get:8 http://mirrors.digitalocean.com/ubuntu noble-updates/main Translation-en [315 kB]
+> Get:9 http://mirrors.digitalocean.com/ubuntu noble-updates/main amd64 Components [181 kB]
+> Get:10 http://mirrors.digitalocean.com/ubuntu noble-updates/universe amd64 Packages [1711 kB]
+> Get:11 http://mirrors.digitalocean.com/ubuntu noble-updates/universe Translation-en [344 kB]
+> Get:12 http://mirrors.digitalocean.com/ubuntu noble-updates/universe amd64 Components [388 kB]
+> Get:13 http://mirrors.digitalocean.com/ubuntu noble-updates/restricted amd64 Packages [1883 kB]
+> Get:14 http://mirrors.digitalocean.com/ubuntu noble-updates/restricted Translation-en [430 kB]
+> Get:15 http://mirrors.digitalocean.com/ubuntu noble-updates/multiverse amd64 Packages [50.7 kB]
+> Get:16 http://mirrors.digitalocean.com/ubuntu noble-updates/multiverse Translation-en [14.3 kB]
+> Get:17 http://mirrors.digitalocean.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+> Get:18 http://mirrors.digitalocean.com/ubuntu noble-backports/main amd64 Components [5744 B]
+> Get:19 http://mirrors.digitalocean.com/ubuntu noble-backports/universe amd64 Components [12.6 kB]
+> Get:20 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1189 kB]
+> Get:21 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [237 kB]
+> Get:22 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [46.4 kB]
+> Get:23 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1228 kB]
+> Get:24 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [248 kB]
+> Get:25 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.3 kB]
+> Get:26 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1783 kB]
+> Get:27 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [410 kB]
+> Get:28 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [45.4 kB]
+> Get:29 http://security.ubuntu.com/ubuntu noble-security/multiverse Translation-en [12.4 kB]
+> Fetched 12.4 MB in 4s (2812 kB/s)
+>
+> Reading package lists... Done
+> Building dependency tree... Done
+> Reading state information... Done
+> 111 packages can be upgraded. Run 'apt list --upgradable' to see them.
+> E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.
+> 2026-11-12 01:36:18 - Installing pre-requisites
+> Hit:1 http://mirrors.digitalocean.com/ubuntu noble InRelease
+> Hit:2 http://mirrors.digitalocean.com/ubuntu noble-updates InRelease
+> Hit:3 http://mirrors.digitalocean.com/ubuntu noble-backports InRelease
+> Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
+> Hit:5 https://repos.insights.digitalocean.com/apt/do-agent main InRelease
+> Hit:6 https://repos-droplet.digitalocean.com/apt/droplet-agent main InRelease
+> Reading package lists... Done
+> Building dependency tree... Done
+> Reading state information... Done
+> 111 packages can be upgraded. Run 'apt list --upgradable' to see them.
+> E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.
+> 2026-11-12 01:36:24 - Error: Failed to install packages (Exit Code: 0)
+> E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.
+> ```
+
+An earlier package installation was interrupted, so Ubuntu is blocking new installations.
+
+Run this first:
+
+```bash
+dpkg --configure -a
+```
+
+Let it finish. If it completes successfully, retry:
+
+```bash
+apt install -y curl ca-certificates
+bash /tmp/nodesource_setup.sh
+apt install -y nodejs
+```
+
+Then check:
+
+```bash
+/usr/bin/node --version
+npm --version
+```
+
+If `dpkg --configure -a` reports an error or asks a question you’re unsure about, paste that output before continuing.
+
+> its just staying like this now&#x20;
+> ```
+> ```
+>
+> User context
+>
+> Attachments:
+> - root@PWA-API:~# dpkg --configure -a root@PWA-API:~# apt install -y curl ca-cert…: `~/.codex/attachments/75eb1f83-f58e-4786-a2c9-fdf18797376a/Pasted text.txt`
+
+<details><summary>2 previous messages</summary>
+
+> I’ll read the terminal output you attached to see where it stopped.
+>
+> <details><summary>Explored a file</summary>
+>
+> - Read `C:/Users/ellitle/.codex/attachments/75eb1f83-f58e-4786-a2c9-fdf18797376a/Pasted text.txt`
+>
+> </details>
+</details>
+
+The output ends after Ubuntu’s service restart checks. It doesn’t show an installation error there, but it also hasn’t returned to the command prompt.
+
+There’s an earlier **`Killed`** message, so let’s check what’s running. **Leave that terminal open** and open a second SSH session to the VPS. Run:
+
+```bash
+ps -eo pid,ppid,stat,etime,args | grep -E 'apt|dpkg|nodesource|curl|gpg|needrestart'
+free -h
+journalctl -k --since "10 minutes ago" --no-pager | tail -n 40
+```
+
+Paste the results. These will help us see whether installation is still active and whether the server ran out of memory.
+
+For now, don’t reboot or start another installation while the first one may still be running.
+
+> i did ctrl c and now its moving
+
+Let it continue now. Ctrl+C may have interrupted a waiting step; we’ll verify the installation once it finishes.
+
+When the `root@PWA-API:~#` prompt returns, run:
+
+```bash
+/usr/bin/node --version
+npm --version
+```
+
+Paste the results or any error. Node should report `v24.x.x`.
+
+> root@PWA-API:\~# /usr/bin/node --version\
+> npm --version\
+> v18.19.1\
+> Command 'npm' not found, but can be installed with:\
+> apt install npm
+
+You have Node.js 18 installed, so the Node.js 24 setup hasn’t completed.
+
+Run these **one at a time**, waiting for each to finish:
+
+```bash
+dpkg --configure -a
+```
+
+```bash
+bash /tmp/nodesource_setup.sh
+```
+
+If that finishes successfully, run:
+
+```bash
+apt install -y nodejs
+```
+
+Then verify:
+
+```bash
+/usr/bin/node --version
+npm --version
+```
+
+You should get `v24.x.x` and an npm version. If the setup script stalls again or reports an error, paste its last lines before continuing.
+
+> now its just&#x20;
+> ```yaml
+> root@PWA-API:~# dpkg --configure -a
+> root@PWA-API:~# bash /tmp/nodesource_setup.sh
+> 2026-11-12 01:44:20 - Installing pre-requisites
+> Hit:1 http://security.ubuntu.com/ubuntu noble-security InRelease
+> Hit:2 https://repos-droplet.digitalocean.com/apt/droplet-agent main InRelease
+> Hit:3 http://mirrors.digitalocean.com/ubuntu noble InRelease
+> Hit:4 http://mirrors.digitalocean.com/ubuntu noble-updates InRelease
+> Hit:5 https://repos.insights.digitalocean.com/apt/do-agent main InRelease
+> Hit:6 http://mirrors.digitalocean.com/ubuntu noble-backports InRelease
+> ```
+
+Those `Hit:` lines are normal—the setup script is checking Ubuntu’s package repositories.
+
+Give it a minute or two. If nothing changes, **leave it running** and open a second SSH session. Run:
+
+```bash
+ps -eo pid,ppid,stat,etime,args | grep -E 'apt|dpkg|nodesource|curl|gpg'
+free -h
+```
+
+Paste that output so we can identify what’s waiting before interrupting it again.
+
+> ```yaml
+> root@PWA-API:~# bash /tmp/nodesource_setup.sh
+> 2026-11-12 01:44:20 - Installing pre-requisites
+> Hit:1 http://security.ubuntu.com/ubuntu noble-security InRelease
+> Hit:2 https://repos-droplet.digitalocean.com/apt/droplet-agent main InRelease
+> Hit:3 http://mirrors.digitalocean.com/ubuntu noble InRelease
+> Hit:4 http://mirrors.digitalocean.com/ubuntu noble-updates InRelease
+> Hit:5 https://repos.insights.digitalocean.com/apt/do-agent main InRelease
+> Hit:6 http://mirrors.digitalocean.com/ubuntu noble-backports InRelease
+> Reading package lists... Done
+> Building dependency tree... Done
+> Reading state information... Done
+> 103 packages can be upgraded. Run 'apt list --upgradable' to see them.
+> Reading package lists... Done
+> Building dependency tree... Done
+> Reading state information... Done
+> apt-transport-https is already the newest version (2.8.4ubuntu0.1).
+> ca-certificates is already the newest version (20260816ubuntu0.24.04.2).
+> curl is already the newest version (8.5.0-2ubuntu10.16).
+> gnupg is already the newest version (2.4.4-2ubuntu17.6).
+> The following packages were automatically installed and are no longer required:
+>   linux-headers-6.8.0-146 linux-headers-6.8.0-146-generic linux-image-6.8.0-146-generic
+>   linux-modules-6.8.0-146-generic
+> Use 'apt autoremove' to remove them.
+> 0 upgraded, 0 newly installed, 0 to remove and 103 not upgraded.
+> Hit:1 http://mirrors.digitalocean.com/ubuntu noble InRelease
+> Hit:2 http://mirrors.digitalocean.com/ubuntu noble-updates InRelease
+> Hit:3 http://mirrors.digitalocean.com/ubuntu noble-backports InRelease
+> Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
+> Get:5 https://deb.nodesource.com/node_24.x nodistro InRelease [12.1 kB]
+> Hit:6 https://repos.insights.digitalocean.com/apt/do-agent main InRelease
+> Hit:7 https://repos-droplet.digitalocean.com/apt/droplet-agent main InRelease
+> Get:8 https://deb.nodesource.com/node_24.x nodistro/main amd64 Packages [10.2 kB]
+> Fetched 22.4 kB in 2s (11.2 kB/s)
+> Reading package lists... Done
+> Building dependency tree... Done
+> Reading state information... Done
+> 104 packages can be upgraded. Run 'apt list --upgradable' to see them.
+> 2026-11-12 01:46:48 - Repository configured successfully.
+> 2026-11-12 01:46:48 - To install Node.js, run: apt install nodejs -y
+> 2026-11-12 01:46:48 - You can use N|solid Runtime as a node.js alternative
+> 2026-11-12 01:46:48 - To install N|solid Runtime, run: apt install nsolid -y
+> ```
+
+The Node.js 24 repository is configured successfully. Now install it:
+
+```bash
+apt install -y nodejs
+```
+
+Wait for the command prompt to return, then check:
+
+```bash
+/usr/bin/node --version
+npm --version
+```
+
+Paste the results—you should see `v24.x.x` and an npm version.
+
+> ```ruby
+> root@PWA-API:~# /usr/bin/node --version
+> npm --version
+> v24.22.3
+> 11.19.1
+> ```
+
+Node.js 24 and npm are installed correctly.
+
+If you haven’t created `bank.service` yet, run:
+
+```bash
+nano /etc/systemd/system/bank.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=Bank Node.js API
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bank/current
+EnvironmentFile=/etc/bank.env
+ExecStart=/usr/bin/node /var/www/bank/current/dist/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save and exit, then run:
+
+```bash
+systemctl daemon-reload
+systemctl enable bank
+```
+
+Leave it stopped until deployment creates the application files.
+
+Your database and Node runtime are ready. **The remaining code change is adapting the API from `users.balance` to the separate `account` table** before deploying.
+
+> ```perl
+> root@PWA-API:~# nano /etc/systemd/system/bank.service
+> root@PWA-API:~# systemctl daemon-reload
+> systemctl enable bank
+> Created symlink /etc/systemd/system/multi-user.target.wants/bank.service → /etc/systemd/system/bank.service.
+> root@PWA-API:~#
+> ```
+
+`bank.service` is enabled successfully. Leave it stopped until the first deployment creates `/var/www/bank/current`.
+
+Your MariaDB database, database login, environment file, Node.js 24, and service are now configured.

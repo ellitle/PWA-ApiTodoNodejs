@@ -1,0 +1,19 @@
+[Unit]
+Description=Bank Node.js API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bank/current
+EnvironmentFile=/etc/bank.env
+ExecStart=/usr/bin/node /var/www/bank/current/dist/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

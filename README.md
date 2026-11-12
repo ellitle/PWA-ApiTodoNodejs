@@ -1,49 +1,57 @@
-# TODO-API
+# Bank API
 
-## Base de données
+API Node.js et TypeScript avec Express, MariaDB et Drizzle ORM.
+Chaque utilisateur possède des comptes avec leur propre solde.
 
-Voici les étapes pour créer la base de données selon une approche code first.
+## Démarrage local
 
-1. Copier le fichier .env.example et le renommer .env
-2. Compléter la configuration en remplissant les valeurs manquantes après le =. Dans notre cas, il ne manquerait que le `DB_PASSWORD=ton_mot_de_passe`.
-3. Dans mariaDB, créer la base de données todo_api
-4. exécuter la commande `npm run db:push` pour créer la base de données. La table est générée à partir du fichier `schema.ts`. Va y jeter un coup d'oeil.
-5. Une fois que c'est fait, exécute `npm run dev` pour démarrer le serveur et va sur `http://localhost:3001/health`. Tu devrais avoir `"database": "healthy"` d'affiché.
-6. C'est Drizzle qui sera notre ORM pour cette session.
+1. Installer les dépendances avec `npm ci` (Node.js 24).
+2. Copier `.env.example` vers `.env` et configurer MariaDB et `JWT_SECRET`.
+3. Créer la base `ScammistanBank` dans MariaDB.
+4. Sur une nouvelle base locale, exécuter `npm run db:push` pour créer le schéma.
+5. Démarrer avec `npm run dev`.
 
-### Questions à répondre :
+Le fichier `.env` contient des secrets et doit rester ignoré par Git.
 
-0. On va se séparer les fichiers dans toute la classe. Ensuite, en grand groupe, on revient sur ces questions.
-1. Quelle commande permet de démarrer ton serveur node.js?
-2. Où sont entreposées les variables qui servent à configurer la base de données?
-3. Comment sont lues ces variables qui sont dans le fichier .env?
-4. Comment la table todos a-t-elle été créée?
-5. Dans quel dossier se situe la configuration de la base de données?
-6. Comment ferais-tu pour modifier
-   1. Le nom de la base de données
-   2. Le type de base de données
-   3. Le nom d'une colonne
-7. Quelle est l'architecture utilisée?
-8. Si je veux ajouter une route, je vais où?
-9. Ou est-ce qu'on gère les autorisations?
+## Routes
 
-## Swagger
-Il est possible de tester l'API à partir du fichier swagger.yml. Par contre, il n'existe pas encore...... Il faudrait le créer. Utilise github copilot pour qu'il génère ton fichier swagger.
-```
-servers:
-  - url: http://localhost:3001
-  - url: lien vers ton site web déployé
+| Méthode | Route | Description |
+| --- | --- | --- |
+| POST | `/api/auth/register` | Créer un utilisateur |
+| POST | `/api/auth/login` | Se connecter |
+| POST | `/api/auth/logout` | Se déconnecter |
+| GET | `/api/accounts` | Lister ses comptes (JWT requis) |
+| GET | `/ping` | Vérifier le serveur |
+| GET | `/health` | Vérifier le serveur et MariaDB |
+
+Swagger est disponible à `/swagger` en développement uniquement.
+
+Après connexion, utiliser le champ `token` de la réponse pour lire ses comptes :
+
+```sh
+curl http://localhost:3001/api/accounts \
+  -H "Authorization: Bearer YOUR_LOGIN_TOKEN"
 ```
 
-## Authentification et authorisation
+Cette route vérifie la signature HS256 et l'expiration du JWT, puis utilise le
+`userId` du token pour filtrer les comptes. Elle attend le header `Authorization`;
+le cookie de connexion seul ne suffit pas. Une liste vide renvoie `[]`.
+Un token absent, invalide ou expiré renvoie HTTP 401. La déconnexion supprime le
+cookie, mais ne révoque pas un bearer token déjà émis : le client doit le supprimer.
 
-Ajoute un accès protégé à l'API à l'aide d'un register et un login. Petite nouveauté, tu dois gérer deux niveaux d'accès soit administrateur et utilisateur normal. Je te laisse voir les sites webs fournis sur moodle pour t'aider!
+Exécuter `npm test` pour compiler et tester la protection de cette route.
 
-## Déploiement
+## Build et déploiement
 
-J'aimerais que tu déploies cet API sur un VPS digital ocean. Les contraintes sont les suivantes :
-- Ton api doit être accessible sur une adresse de type fqdn (fully qualified domain name) ex : antoine.com  et non pas une adresse IP.
-- Ton api doit être déployée une fois buildée (`npm run build`) sur le serveur. Un dossier nommé dist sera créé et c'est le fichier server.js qu'il faut démarrer.
-- Jamais le fichier .env doit être dans ton projet (il contient le mot de passe vers ta base de données). Tu dois donc gérer les variables d'environnement dans le serveur directement.
-  - Soit tu crées un autre fichier .env (moins sécuritaire, car il contient des informations critiques)
-  - Soit tu lances le serveur avec une ligne dans ce genre : `PORT=3001 NODE_ENV=production DB_HOST=localhost ...ETC..... node dist/server.js`
+```sh
+npm run build
+npm start
+```
+
+Le workflow GitHub Actions déploie les changements de la branche `etu` dans
+`/var/www/bank` et démarre le service systemd `bank`. Consulter
+[les instructions VPS](deploy/README.md) pour la configuration initiale,
+les secrets GitHub et les variables d'environnement du serveur.
+
+Les migrations historiques restent dans `drizzle/`. Les migrations de base de
+données ne sont jamais appliquées automatiquement par le workflow.

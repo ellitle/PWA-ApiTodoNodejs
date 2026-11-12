@@ -1,32 +1,15 @@
 openapi: 3.0.0
 info:
-  title: Todo API
+  title: Bank API
   version: 1.0.0
 servers:
 - url: http://localhost:3001/api/
 paths:
-  /todos:
-    get:
-      summary: Get all todos
-      responses:
-        200:
-          description: Successful response
-          content:
-            application/json:
-              example:
-                - id: "550e8400-e29b-41d4-a716-446655440000"
-                  isCompleted: true
-                  createdAt: "2023-10-19T00:00:00.000Z"
-                  updatedAt: "2023-10-19T00:00:00.000Z"
-                  text: "todo completed"
-                - id: "550e8400-e29b-41d4-a716-446655440001"
-                  isCompleted: false
-                  createdAt: "2023-10-19T00:00:00.000Z"
-                  updatedAt: "2023-10-19T00:00:00.000Z"
-                  text: "todo not completed"
-  /todo:
+  /auth/register:
     post:
-      summary: Create a new todo
+      summary: Register a new user
+      tags:
+        - Authentication
       requestBody:
         required: true
         content:
@@ -34,34 +17,29 @@ paths:
             schema:
               type: object
               properties:
-                text:
+                lastName:
+                  type: string
+                firstName:
+                  type: string
+                email:
+                  type: string
+                password:
                   type: string
       responses:
         201:
-          description: Todo created
+          description: User registered successfully
           content:
             application/json:
               example:
-                - id: "550e8400-e29b-41d4-a716-446655440000"
-                  isCompleted: true
-                  createdAt: "2023-10-19T00:00:00.000Z"
-                  updatedAt: "2023-10-19T00:00:00.000Z"
-                  text: "todo completed"
-        400:
-          description: Bad request
-          content:
-            text/plain:
-              example: "Bad todo"
-  /todo/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        description: The ID of the todo
-        schema:
-          type: string
-    patch:
-      summary: Update a todo's completion status
+                lastName: "Jackson"
+                firstName: "Michael"
+                email: "michael@jackson.com"
+                password: "Patate123"
+  /auth/login:
+    post:
+      summary: Login a user
+      tags:
+        - Authentication
       requestBody:
         required: true
         content:
@@ -69,25 +47,70 @@ paths:
             schema:
               type: object
               properties:
-                isCompleted:
-                  type: boolean
-                text:
+                email:
+                  type: string
+                password:
                   type: string
       responses:
-        204:
-          description: Todo patched
-        400:
-          description: Bad request
+        200:
+          description: User logged in successfully
           content:
-            text/plain:
-              example: "Bad todo"
-    delete:
-      summary: Delete a todo
+            application/json:
+              example:
+                email: "michael@jackson.com"
+                password: "Patate123"
+  /auth/logout:
+    post:
+      summary: Logout a user
+      tags:
+        - Authentication
       responses:
-        204:
-          description: Todo deleted
-        400:
-          description: Bad request
+        200:
+          description: User logged out successfully
           content:
-            text/plain:
-              example: "Bad todo"
+            application/json:
+              example:
+                message: "User logged out successfully"
+  /accounts:
+    get:
+      summary: List the authenticated user's accounts
+      tags:
+        - Accounts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Accounts belonging to the authenticated user (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+        '401':
+          description: Missing, invalid or expired bearer token
+        '500':
+          description: Server configuration or database error
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Account:
+      type: object
+      required: [id, userId, balance, openedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        balance:
+          type: string
+          example: '10000.00'
+        openedAt:
+          type: string
+          format: date-time
