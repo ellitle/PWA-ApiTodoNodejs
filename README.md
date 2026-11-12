@@ -6,7 +6,7 @@ Chaque utilisateur possède des comptes avec leur propre solde.
 ## Démarrage local
 
 1. Installer les dépendances avec `npm ci` (Node.js 24).
-2. Copier `.env.example` vers `.env` et configurer MariaDB et `JWT_SECRET`.
+2. Copier `.env.example` vers `.env` et configurer `DB_CONNECTION_STRING` et `JWT_KEY`.
 3. Créer la base `ScammistanBank` dans MariaDB.
 4. Sur une nouvelle base locale, exécuter `npm run db:push` pour créer le schéma.
 5. Démarrer avec `npm run dev`.
@@ -50,7 +50,7 @@ npm start
 
 Le workflow GitHub Actions déploie les changements de la branche `etu` dans
 `/var/www/bank` et démarre le service systemd `bank`. Consulter
-[les instructions VPS](deploy/README.md) pour la configuration initiale,
+[les instructions VPS](AI%20Convos/README%20VPS%20Deploy.md) pour la configuration initiale,
 les secrets GitHub et les variables d'environnement du serveur.
 
 Les migrations historiques restent dans `drizzle/`. Les migrations de base de
