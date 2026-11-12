@@ -20,6 +20,8 @@ export class UserRepository {
     return db.transaction(async (tx) => {
       await tx.insert(users).values(user);
   
+      // Cree le compte lors de la creation de l'utilisateur
+      // Si la transaction échoue, l'utilisateur ne sera pas créé et le compte non plus.
       await tx.insert(account).values({
         id: randomUUID(),
         userId: user.id,

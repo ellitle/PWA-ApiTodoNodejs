@@ -15,7 +15,7 @@ export const errorHandler = (
   const message = error.message || 'Internal Server Error';
   if (statusCode === 500) {
     console.error(`Error ${statusCode}: ${message}`);
-    console.error(error.stack);
+    console.error(error);
   }
   
   res.status(statusCode).json({

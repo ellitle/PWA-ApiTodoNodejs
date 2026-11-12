@@ -9,7 +9,7 @@ export class AuthController {
     register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         try {
           const user  = await authService.register(req.body as RegisterUserRequest);
-          res.status(201).json(user );
+          res.status(201).json(user);
         } catch (error) {
           next(error);
         }
@@ -22,6 +22,8 @@ export class AuthController {
             res.status(500).json({ error: 'JWT secret not configured' });
             return;
           }
+
+          // Je me suis aide de l'AI pour faire le login avec JWT, j'ai suivi les instructions de l'AI pour générer le token et le mettre dans un cookie
           const user = await authService.login(req.body);
           const token = jwt.sign({ userId: user.id }, secret, { algorithm: 'HS256', expiresIn: '1h' });
 
