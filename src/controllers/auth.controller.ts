@@ -17,7 +17,7 @@ export class AuthController {
 
     login = async (req: Request, res: Response): Promise<void> => {
         try {
-          const secret = process.env.JWT_SECRET;
+          const secret = process.env.JWT_KEY;
           if (!secret) {
             res.status(500).json({ error: 'JWT secret not configured' });
             return;

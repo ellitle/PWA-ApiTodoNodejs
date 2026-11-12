@@ -24,7 +24,6 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.6",
-    "node": "^26.12.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.3",
     "yamljs": "^0.3.0"
@@ -52,4 +51,3 @@
   },
   "license": "MIT"
 }
-
