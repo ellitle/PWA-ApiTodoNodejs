@@ -7,7 +7,7 @@ const accountService = new AccountService();
 export class AccountController {
   getUserAccounts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const secret = process.env.JWT_KEY;
+      const secret = process.env.JWT_SECRET;
       if (!secret) {
         res.status(500).json({ error: 'JWT secret not configured' });
         return;
@@ -22,6 +22,7 @@ export class AccountController {
       const token = header.slice(7);
       const payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
 
+      // Validation fait avec l'aide de l'AI pour s'assurer que le payload contient bien un userId et un exp
       if (
         typeof payload === 'string' ||
         typeof payload.userId !== 'string' ||

@@ -56,7 +56,7 @@ export class AuthService {
       id: user.id,
       lastName: user.lastName,
       firstName: user.firstName,
-      token: '' // Token generation will be handled in the controller
+      token: '' // La generation du token est gérée dans le controller
     };
   }
 
