@@ -21,3 +21,13 @@ export const account = mysqlTable('account', {
   balance: decimal('balance', { precision: 15, scale: 2 }).notNull().default('10000.00'),
   openedAt: timestamp('openedAt').defaultNow().notNull(),
 });
+
+//table transaction
+export const transaction = mysqlTable('transaction', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  senderId: varchar('senderId', { length: 36 }).notNull().references(() => account.id, { onDelete: 'restrict' }),
+  receiverId: varchar('receiverId', { length: 36 }).notNull().references(() => account.id, { onDelete: 'restrict' }),
+  amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+  date: timestamp('date').defaultNow().notNull(),
+  transactionState: varchar('transactionType', { length: 50 }).notNull(),
+});

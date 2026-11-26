@@ -91,6 +91,45 @@ paths:
           description: Missing, invalid or expired bearer token
         '500':
           description: Server configuration or database error
+  /accounts/{accountId}/deposits:
+    post:
+      summary: Deposit funds into an account
+      tags:
+        - Accounts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: string
+                  example: '500.00'
+      responses:
+        '200':
+          description: Funds deposited successfully, returning the updated account information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: Invalid request body or parameters
+        '401':
+          description: Missing, invalid or expired bearer token
+        '404':
+          description: Account not found for the authenticated user
+        '500':
+          description: Server configuration or database error
 components:
   securitySchemes:
     bearerAuth:

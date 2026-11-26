@@ -6,5 +6,6 @@ export const createAccountRoutes = (): Router => {
   const router = Router();
 
   router.get('/accounts', accountController.getUserAccounts);
+  router.post('/accounts/:accountId/deposits', accountController.addFunds);
   return router;
 };
